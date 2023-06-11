@@ -142,7 +142,9 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	// Create spans for this function.
 	// tracing.DefaultTracer() returns the tracer initialized when calling Manage().
 	// Refer to OpenTelemetry's Go SDK to know how to customize your spans.
-	log.DefaultLogger.Debug("setting", d.settings)
+	log.DefaultLogger.Debug("setting", d.settings.DecryptedSecureJSONData['httpHeaderValue1'])
+	log.DefaultLogger.Debug("setting", d.settings.URL)
+	log.DefaultLogger.Debug("setting", d.settings.JSONData['httpHeaderName1'])
 	ctx, span := tracing.DefaultTracer().Start(
 		ctx,
 		"query processing",
