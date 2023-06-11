@@ -106,7 +106,7 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 	response := backend.NewQueryDataResponse()
 
 	// loop over queries and execute them individually.
-	for q := range req.Queries {
+	for _, q := range req.Queries {
 		// if i%2 != 0 {
 		// 	// Just to demonstrate how to return an error with a custom status code.
 		// 	response.Responses[q.RefID] = backend.ErrDataResponse(
