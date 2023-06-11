@@ -71,7 +71,7 @@ var DatasourceOpts = datasource.ManageOpts{
 		// Optional custom attributes attached to the tracer's resource.
 		// The tracer will already have some SDK and runtime ones pre-populated.
 		CustomAttributes: []attribute.KeyValue{
-			attribute.String("my_plugin.my_attribute", "custom value"),
+			attribute.String("app_code", "GRAP-002"),
 		},
 	},
 }
