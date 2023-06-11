@@ -164,7 +164,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	if err != nil {
 		return backend.DataResponse{}, fmt.Errorf("new request with context: %w", err)
 	}
-
+	log.DefaultLogger.Debug("resp0", query.JSON)
 	if len(query.JSON) > 0 {
 		input := &apiQuery{}
 		err = json.Unmarshal(query.JSON, input)
@@ -175,7 +175,9 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		q.Add("multiplier", strconv.Itoa(input.Multiplier))
 		req.URL.RawQuery = q.Encode()
 	}
-	log.DefaultLogger.Debug("resp1", req, "url", d.settings.URL, "custom", req.URL.RawQuery, "some", q)
+	log.DefaultLogger.Debug"url", d.settings.URL)
+	log.DefaultLogger.Debug"query", q)
+	log.DefaultLogger.Debug"req", req)
 	httpResp, err := d.httpClient.Do(req)
 	// test(req)
 	log.DefaultLogger.Debug("resp2", httpResp.Body)
