@@ -1,12 +1,12 @@
 {
   "$schema": "https://raw.githubusercontent.com/grafana/grafana/master/docs/sources/developers/plugins/plugin.schema.json",
   "type": "datasource",
-  "name": "Datasource Http Backend",
-  "id": "grafana-datasourcehttpbackend-datasource",
+  "name": "Datasource signalfx",
+  "id": "signalfx-datasource",
   "metrics": true,
   "backend": true,
   "alerting": true,
-  "executable": "gpx_datasource_http_backend",
+  "executable": "gpx_signalfx-datasource",
   "info": {
     "description": "",
     "author": {
@@ -20,7 +20,7 @@
     "links": [
       {
         "name": "Website",
-        "url": "https://github.com/grafana/grafana-starter-datasource"
+        "url": "https://github.com/savec80/signalfx-datasource.git"
       },
       {
         "name": "License",
