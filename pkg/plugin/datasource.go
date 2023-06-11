@@ -173,10 +173,11 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		}
 		q := req.URL.Query()
 		q.Add("multiplier", strconv.Itoa(input.Multiplier))
+		log.DefaultLogger.Debug("query", q)
 		req.URL.RawQuery = q.Encode()
+		log.DefaultLogger.Debug("RawQuery", req.URL.RawQuery)
 	}
 	log.DefaultLogger.Debug("url", d.settings.URL)
-	log.DefaultLogger.Debug("query", q)
 	log.DefaultLogger.Debug("req", req)
 	log.DefaultLogger.Debug("test1")
 	httpResp, err := d.httpClient.Do(req)
