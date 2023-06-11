@@ -176,8 +176,8 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		req.URL.RawQuery = q.Encode()
 	}
 	httpResp, err := d.httpClient.Do(req)
-	test(req)
-	log.DefaultLogger.Debug("resp2", httpResp.StatusCode)
+	// test(req)
+	log.DefaultLogger.Debug("resp2", httpResp.Body)
 	switch {
 	case err == nil:
 		break
@@ -204,6 +204,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		return backend.DataResponse{}, fmt.Errorf("%w: decode: %s", errRemoteRequest, err)
 	}
 	span.AddEvent("JSON response decoded")
+	log.DefaultLogger.Debug("JSON response decoded", body)
 
 	// Create slice of values for time and values.
 	times := make([]time.Time, len(body.DataPoints))
