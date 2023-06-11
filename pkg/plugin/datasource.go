@@ -176,6 +176,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		req.URL.RawQuery = q.Encode()
 	}
 	httpResp, err := d.httpClient.Do(req)
+	test(httpResp)
 	log.DefaultLogger.Debug("resp2", httpResp.StatusCode)
 	switch {
 	case err == nil:
@@ -225,6 +226,16 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	}
 	span.AddEvent("Frames created")
 	return dataResp, err
+}
+
+func test(req *http.Request) {
+	decoder := json.NewDecoder(req.Body)
+	var t test_struct
+	err := decoder.Decode(&t)
+	if err != nil {
+		panic(err)
+	}
+	log.Println(t.Test)
 }
 
 // CheckHealth performs a request to the specified data source and returns an error if the HTTP handler did not return
