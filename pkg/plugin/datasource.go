@@ -107,14 +107,14 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 
 	// loop over queries and execute them individually.
 	for i, q := range req.Queries {
-		if i%2 != 0 {
-			// Just to demonstrate how to return an error with a custom status code.
-			response.Responses[q.RefID] = backend.ErrDataResponse(
-				backend.StatusBadRequest,
-				fmt.Sprintf("user friendly error for query number %v, excluding any sensitive information", i+1),
-			)
-			continue
-		}
+		// if i%2 != 0 {
+		// 	// Just to demonstrate how to return an error with a custom status code.
+		// 	response.Responses[q.RefID] = backend.ErrDataResponse(
+		// 		backend.StatusBadRequest,
+		// 		fmt.Sprintf("user friendly error for query number %v, excluding any sensitive information", i+1),
+		// 	)
+		// 	continue
+		// }
 
 		res, err := d.query(ctx, req.PluginContext, q)
 		switch {
