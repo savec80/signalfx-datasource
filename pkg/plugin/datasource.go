@@ -228,7 +228,11 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	return dataResp, err
 }
 
-func test(req *http.Request) {
+type test struct {
+	Test string `json:"test"`
+}
+
+func test(req *http.Response) {
 	decoder := json.NewDecoder(req.Body)
 	var t test_struct
 	err := decoder.Decode(&t)
