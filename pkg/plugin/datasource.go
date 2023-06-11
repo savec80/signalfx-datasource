@@ -45,7 +45,7 @@ func NewDatasource(settings backend.DataSourceInstanceSettings) (instancemgmt.In
 
 	// Uncomment the following to forward all HTTP headers in the requests made by the client
 	// (disabled by default since SDK v0.161.0)
-	opts.ForwardHTTPHeaders = true
+	// opts.ForwardHTTPHeaders = true
 
 	// Using httpclient.New without any provided httpclient.Options creates a new HTTP client with a set of
 	// default middlewares (httpclient.DefaultMiddlewares) providing additional built-in functionality, such as:
@@ -71,7 +71,7 @@ var DatasourceOpts = datasource.ManageOpts{
 		// Optional custom attributes attached to the tracer's resource.
 		// The tracer will already have some SDK and runtime ones pre-populated.
 		CustomAttributes: []attribute.KeyValue{
-			attribute.String("appcode", "GRAP-002"),
+			attribute.String("my_plugin.my_attribute", "custom value"),
 		},
 	},
 }
