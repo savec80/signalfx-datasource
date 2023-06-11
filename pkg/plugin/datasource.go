@@ -176,7 +176,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		req.URL.RawQuery = q.Encode()
 	}
 	httpResp, err := d.httpClient.Do(req)
-	test(httpResp)
+	test(req)
 	log.DefaultLogger.Debug("resp2", httpResp.StatusCode)
 	switch {
 	case err == nil:
@@ -232,7 +232,7 @@ type test struct {
 	Test string `json:"test"`
 }
 
-func test(req *http.Response) {
+func test(req *http.Request) {
 	decoder := json.NewDecoder(req.Body)
 	var t test_struct
 	err := decoder.Decode(&t)
