@@ -132,7 +132,7 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 		// save the response in a hashmap
 		// based on with RefID as identifier
 		response.Responses[q.RefID] = res
-		log.DefaultLogger.Debug("response", response, "res", res)
+		log.DefaultLogger.Debug("response", *response, "res", res)
 	}
 
 	return response, nil
@@ -142,6 +142,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	// Create spans for this function.
 	// tracing.DefaultTracer() returns the tracer initialized when calling Manage().
 	// Refer to OpenTelemetry's Go SDK to know how to customize your spans.
+	log.DefaultLogger.Debug("setting", d.settings)
 	ctx, span := tracing.DefaultTracer().Start(
 		ctx,
 		"query processing",
