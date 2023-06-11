@@ -132,6 +132,7 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 		// save the response in a hashmap
 		// based on with RefID as identifier
 		response.Responses[q.RefID] = res
+		log.DefaultLogger.Debug("response", response, "res", res)
 	}
 
 	return response, nil
