@@ -3,12 +3,21 @@ package plugin
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/datasource"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/tracing"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Make sure Datasource implements required interfaces. This is important to do
@@ -19,79 +28,107 @@ import (
 var (
 	_ backend.QueryDataHandler      = (*Datasource)(nil)
 	_ backend.CheckHealthHandler    = (*Datasource)(nil)
-	_ backend.CallResourceHandler   = (*Datasource)(nil)
 	_ instancemgmt.InstanceDisposer = (*Datasource)(nil)
 )
 
-// Datasource is an example datasource which can respond to data queries, reports
-// its health and has streaming skills.
+var (
+	errRemoteRequest  = errors.New("remote request error")
+	errRemoteResponse = errors.New("remote response error")
+)
 
 // NewDatasource creates a new datasource instance.
-func newDatasource() datasource.ServeOpts {
-	// creates a instance manager for your plugin. The function passed
-	// into `NewInstanceManger` is called when the instance is created
-	// for the first time or when a datasource configuration changed.
-	im := datasource.NewInstanceManager(newDataSourceInstance)
-	ds := &SignalFxDatasource{
-		im: im,
+func NewDatasource(settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+	opts, err := settings.HTTPClientOptions()
+	if err != nil {
+		return nil, fmt.Errorf("http client options: %w", err)
 	}
 
-	return datasource.ServeOpts{
-		QueryDataHandler:   ds,
-		CheckHealthHandler: ds,
+	// Uncomment the following to forward all HTTP headers in the requests made by the client
+	// (disabled by default since SDK v0.161.0)
+	// opts.ForwardHTTPHeaders = true
+
+	// Using httpclient.New without any provided httpclient.Options creates a new HTTP client with a set of
+	// default middlewares (httpclient.DefaultMiddlewares) providing additional built-in functionality, such as:
+	//	- TracingMiddleware (creates spans for each outgoing HTTP request)
+	//	- BasicAuthenticationMiddleware (populates Authorization header if basic authentication been configured via the
+	//		DataSourceHttpSettings component from @grafana/ui)
+	//	- CustomHeadersMiddleware (populates headers if Custom HTTP Headers been configured via the DataSourceHttpSettings
+	//		component from @grafana/ui)
+	//	- ContextualMiddleware (custom middlewares per context.Context, see httpclient.WithContextualMiddleware)
+	cl, err := httpclient.New(opts)
+	if err != nil {
+		return nil, fmt.Errorf("httpclient new: %w", err)
 	}
+	return &Datasource{
+		settings:   settings,
+		httpClient: cl,
+	}, nil
+}
+
+// DatasourceOpts contains the default ManageOpts for the datasource.
+var DatasourceOpts = datasource.ManageOpts{
+	TracingOpts: tracing.Opts{
+		// Optional custom attributes attached to the tracer's resource.
+		// The tracer will already have some SDK and runtime ones pre-populated.
+		CustomAttributes: []attribute.KeyValue{
+			attribute.String("my_plugin.my_attribute", "custom value"),
+		},
+	},
+}
+
+// Datasource is an example datasource which can respond to data queries, reports
+// its health and has streaming skills.
+type Datasource struct {
+	settings backend.DataSourceInstanceSettings
+
+	httpClient *http.Client
 }
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
 // created. As soon as datasource settings change detected by SDK old datasource instance will
 // be disposed and a new one will be created using NewSampleDatasource factory function.
-func (datasourceInfo *Datasource) Dispose() {
+func (d *Datasource) Dispose() {
 	// Clean up datasource instance resources.
+	d.httpClient.CloseIdleConnections()
 }
 
 // QueryData handles multiple queries and returns multiple responses.
 // req contains the queries []DataQuery (where each query contains RefID as a unique identifier).
 // The QueryDataResponse contains a map of RefID to the response for each query, and each response
 // contains Frames ([]*Frame).
-func (ds *SignalFxDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
+func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
+	// Spans are created automatically for QueryData and all other plugin interface methods.
+	// The span's context is in the ctx, you can get it with trace.SpanContextFromContext(ctx)
+	sctx := trace.SpanContextFromContext(ctx)
+	log.DefaultLogger.Debug("QueryData", "traceID", sctx.TraceID().String(), "spanID", sctx.SpanID().String())
 
-	// Unmarshal the json into datasource settings
-	if err := json.Unmarshal(req.PluginContext.DataSourceInstanceSettings.JSONData, &ds.settings); err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if r := recover(); r != nil {
-				log.DefaultLogger.Info("Recovered in QueryData", "error", r)
-			}
-	}()
-	log.DefaultLogger.Info("QueryData", "request", req)
-
-	instance, err := ds.im.Get(req.PluginContext)
-	if err != nil {
-		log.DefaultLogger.Info("Failed getting connection", "error", err)
-		return nil, err
-	}
 	// create response struct
 	response := backend.NewQueryDataResponse()
 
-	instSetting, ok := instance.(*instanceSettings)
-    if !ok {
-        log.DefaultLogger.Info("Failed getting connection")
-        return nil, nil
-    }
-	// authenticate with AWS services
-	// if err := ds.authenticate(ctx, req); err != nil {
-	// return nil, err
-	// }
-	// if ds.settings.token != "" {
-	// 	log.DefaultLogger.Info("Get token", ds.settings)
-	// 	token := ds.settings.token
-	// }
 	// loop over queries and execute them individually.
-	for _, q := range req.Queries {
-		res := ds.query(ctx, instSetting, q)
+	for i, q := range req.Queries {
+		if i%2 != 0 {
+			// Just to demonstrate how to return an error with a custom status code.
+			response.Responses[q.RefID] = backend.ErrDataResponse(
+				backend.StatusBadRequest,
+				fmt.Sprintf("user friendly error for query number %v, excluding any sensitive information", i+1),
+			)
+			continue
+		}
 
+		res, err := d.query(ctx, req.PluginContext, q)
+		switch {
+		case err == nil:
+			break
+		case errors.Is(err, context.DeadlineExceeded):
+			res = backend.ErrDataResponse(backend.StatusTimeout, "gateway timeout")
+		case errors.Is(err, errRemoteRequest):
+			res = backend.ErrDataResponse(backend.StatusBadGateway, "bad gateway request")
+		case errors.Is(err, errRemoteResponse):
+			res = backend.ErrDataResponse(backend.StatusValidationFailed, "bad gateway response")
+		default:
+			res = backend.ErrDataResponse(backend.StatusInternal, err.Error())
+		}
 		// save the response in a hashmap
 		// based on with RefID as identifier
 		response.Responses[q.RefID] = res
@@ -100,245 +137,117 @@ func (ds *SignalFxDatasource) QueryData(ctx context.Context, req *backend.QueryD
 	return response, nil
 }
 
+func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery) (backend.DataResponse, error) {
+	// Create spans for this function.
+	// tracing.DefaultTracer() returns the tracer initialized when calling Manage().
+	// Refer to OpenTelemetry's Go SDK to know how to customize your spans.
+	ctx, span := tracing.DefaultTracer().Start(
+		ctx,
+		"query processing",
+		trace.WithAttributes(
+			attribute.String("query.ref_id", query.RefID),
+			attribute.String("query.type", query.QueryType),
+			attribute.Int64("query.max_data_points", query.MaxDataPoints),
+			attribute.Int64("query.interval_ms", query.Interval.Milliseconds()),
+			attribute.Int64("query.time_range.from", query.TimeRange.From.Unix()),
+			attribute.Int64("query.time_range.to", query.TimeRange.To.Unix()),
+		),
+	)
+	defer span.End()
 
-// type queryModel struct {
-// 	Format string `json:"format"`
-// 	QueryTxt string `json:"queryTxt"`
-// }
+	// Do HTTP request
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, d.settings.URL, nil)
+	if err != nil {
+		return backend.DataResponse{}, fmt.Errorf("new request with context: %w", err)
+	}
+	if len(query.JSON) > 0 {
+		input := &apiQuery{}
+		err = json.Unmarshal(query.JSON, input)
+		if err != nil {
+			return backend.DataResponse{}, fmt.Errorf("unmarshal: %w", err)
+		}
+		q := req.URL.Query()
+		q.Add("multiplier", strconv.Itoa(input.Multiplier))
+		req.URL.RawQuery = q.Encode()
+	}
+	httpResp, err := d.httpClient.Do(req)
+	switch {
+	case err == nil:
+		break
+	case errors.Is(err, context.DeadlineExceeded):
+		return backend.DataResponse{}, err
+	default:
+		return backend.DataResponse{}, fmt.Errorf("http client do: %w: %s", errRemoteRequest, err)
+	}
+	defer func() {
+		if err := httpResp.Body.Close(); err != nil {
+			log.DefaultLogger.Error("query: failed to close response body", "err", err)
+		}
+	}()
+	span.AddEvent("HTTP request done")
 
-func getTypeArray(typ string) interface{} {
-    log.DefaultLogger.Debug("getTypeArray", "type", typ)
-    switch t := typ; t {
-        case "timestamp":
-            return []time.Time{}
-        case "bigint", "int":
-            return []int64{}
-        case "smallint":
-            return []int16{}
-        case "boolean":
-            return []bool{}
-        case "double", "varint", "decimal":
-            return []float64{}
-        case "float":
-            return []float32{}
-        case "tinyint":
-            return []int8{}
-        default:
-            return []string{}
-    }
-}
-
-func toValue(val interface{}, typ string) interface{} {
-    if (val == nil) {
-        return nil
-    }
-    switch t := typ; t {
-        case "blob":
-            return "Blob"
-    }
-    switch t := val.(type) {
-        case float32, time.Time, string, int64, float64, bool, int16, int8:
-            return t
-        case gocql.UUID:
-            return t.String()
-        case int:
-            return int64(t)
-        case *inf.Dec:
-            if s, err := strconv.ParseFloat(t.String(), 64); err == nil {
-                return s
-            }
-            return 0
-        case *big.Int:
-            if s, err := strconv.ParseFloat(t.String(), 64); err == nil {
-                return s
-            }
-            return 0
-        default:
-            r, err := json.Marshal(val)
-            if (err != nil) {
-                log.DefaultLogger.Info("Marsheling failed ", "err", err)
-            }
-            return string(r)
-    }
-}
-
-
-func (ds *SignalFxDatasource) query(ctx context.Context, instance *instanceSettings, dataQuery backend.DataQuery) backend.DataResponse {
-	var query queryModel
-	var frame *data.Frame
-	var apiCall SignalFxApiCall
-	response := backend.DataResponse{}
-
-	response.Error = json.Unmarshal(dataQuery.JSON, &query)
-	if response.Error != nil {
-		return response
+	// Make sure the response was successful
+	if httpResp.StatusCode != http.StatusOK {
+		return backend.DataResponse{}, fmt.Errorf("%w: expected 200 response, got %d", errRemoteResponse, httpResp.StatusCode)
 	}
 
-	// var v interface{}
-	// json.Unmarshal(query.JSON, &v)
-	// dt := v.(map[string]interface{})
-	// if response.Error != nil {
-	//    log.DefaultLogger.Warn("Failed unmarsheling json", "err", response.Error, "json ", string(query.JSON))
-	// 	return response
-	// }
-
-	frame := data.NewFrame("response")
-	token := ds.settings.token
-	url := ds.settings.url
-
-	log.DefaultLogger.Debug("queryText found", "querytxt", querytxt, "instance", instance, "token", token, "url", url)
-
-	
-	switch apiCall.Path {
-	case "/v2/metric":
-		apiCall.Method = http.MethodGet
-		frame, response.Error = ds.getMetrics(ctx, &apiCall, url, token)
-	// case "/v2/suggest/_signalflowsuggest":
-	// 	apiCall.Method = http.MethodPost
-	// 	frame, response.Error = ds.getSuggestions(ctx, &apiCall)
+	// Decode response
+	var body apiMetrics
+	if err := json.NewDecoder(httpResp.Body).Decode(&body); err != nil {
+		return backend.DataResponse{}, fmt.Errorf("%w: decode: %s", errRemoteRequest, err)
 	}
+	span.AddEvent("JSON response decoded")
 
-	frame, response.Error = ds.getDatapoints(ctx, url, token)
-
-	// frame, response.Error = s3List(ctx, ds.s3, &query)
-	if response.Error != nil {
-		return response
+	// Create slice of values for time and values.
+	times := make([]time.Time, len(body.DataPoints))
+	values := make([]float64, len(body.DataPoints))
+	for i, p := range body.DataPoints {
+		times[i] = p.Time
+		values[i] = p.Value
 	}
-	response.Frames = append(response.Frames, frame)
+	span.AddEvent("Datapoints created")
 
-	return response
+	// Create frame and add it to the response
+	dataResp := backend.DataResponse{
+		Frames: []*data.Frame{
+			data.NewFrame(
+				"response",
+				data.NewField("time", nil, times),
+				data.NewField("values", nil, values),
+			),
+		},
+	}
+	span.AddEvent("Frames created")
+	return dataResp, err
 }
 
-// func (t *SignalFxDatasource) getMetrics(ctx context.Context, apiCall *SignalFxApiCall) (*datasource.DatasourceResponse, error) {
-// 	response := MetricResponse{}
-// 	t.makeAPICall(tsdbReq, apiCall, &response)
-// 	t.logger.Debug("Unmarshalled API response", "response", response)
-// 	values := make([]string, 0)
-// 	for _, r := range response.Results {
-// 		values = append(values, r.Name)
-// 	}
-// 	return t.formatAsTable(values), nil
-// }
-
-// CheckHealth handles health checks sent from Grafana to the plugin.
-// The main use case for these health checks is the test button on the
-// datasource configuration page which allows users to verify that
-// a datasource is working as expected.
-func (d *Datasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
-	var status = backend.HealthStatusOk
-	var message = "Data source is working"
+// CheckHealth performs a request to the specified data source and returns an error if the HTTP handler did not return
+// a 200 OK response.
+func (d *Datasource) CheckHealth(ctx context.Context, _ *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, d.settings.URL, nil)
+	if err != nil {
+		return newHealthCheckErrorf("could not create request"), nil
+	}
+	resp, err := d.httpClient.Do(r)
+	if err != nil {
+		return newHealthCheckErrorf("request error"), nil
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.DefaultLogger.Error("check health: failed to close response body", "err", err.Error())
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		return newHealthCheckErrorf("got response code %d", resp.StatusCode), nil
+	}
 	return &backend.CheckHealthResult{
-		Status:  status,
-		Message: message,
+		Status:  backend.HealthStatusOk,
+		Message: "Data source is working",
 	}, nil
 }
 
-
-
-
-// type instanceSettings struct {
-// 	cluster *gocql.ClusterConfig
-// 	authenticator *gocql.PasswordAuthenticator
-// 	sessions map[string]*gocql.Session
-// }
-
-
-
-// func (settings *instanceSettings) getSession(hostRef interface{}) (*gocql.Session, error) {
-// 	if r := recover(); r != nil {
-// 			log.DefaultLogger.Info("Recovered in getSession", "error", r)
-// 			var err error= nil
-// 			switch x := r.(type) {
-// 			case string:
-// 					err = errors.New(x)
-// 			case error:
-// 					err = x
-// 			default:
-// 					err = errors.New("unknown panic")
-// 			}
-// 			return nil, err
-// 	}
-// 	var host string
-// 	if hostRef != nil {
-// 			host = fmt.Sprintf("%v", hostRef)
-// 	}
-// 	if val, ok := settings.sessions[host]; ok {
-// 			return val, nil
-// 	}
-// 	if settings.cluster == nil {
-// 			if host == "" {
-// 					return nil, errors.New("no host supplied for connection")
-// 			}
-// 			settings.cluster = gocql.NewCluster(host)
-// 			log.DefaultLogger.Debug("getSession creating cluster from host", "host", host)
-// 			if settings.authenticator != nil {
-// 					settings.cluster.Authenticator = *settings.authenticator
-// 			}
-// 	}
-// 	log.DefaultLogger.Debug("getSession", "host", host)
-// 	if host == "" {
-// 			settings.cluster.HostFilter = nil
-// 	} else {
-// 			settings.cluster.HostFilter = gocql.WhiteListHostFilter(host)
-// 	}
-// 	session, err := gocql.NewSession(*settings.cluster)
-// 	if err != nil {
-// 			log.DefaultLogger.Info("unable to connect to scylla", "err", err, "session", session, "host", host)
-// 			return nil, err
-// 	}
-// 	settings.sessions[host] = session
-// 	return session, nil
-// }
-
-func NewSignalFxDatasourceInstance(setting backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
-
-	return &SignalFxDatasource{
-		handlers:     make([]SignalFxJob, 0),
-		clientMutex:  sync.Mutex{},
-		handlerMutex: sync.Mutex{},
-		apiClient:    NewSignalFxApiClient(),
-	}
-
-// }
-
-// func newDataSourceInstance(setting backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
-// 	type editModel struct {
-// 			Host string `json:"host"`
-// 	}
-// 	var hosts editModel
-// 	log.DefaultLogger.Debug("newDataSourceInstance", "data", setting.JSONData)
-// 	var secureData = setting.DecryptedSecureJSONData
-// 	err := json.Unmarshal(setting.JSONData, &hosts)
-// 	if err != nil {
-// 			log.DefaultLogger.Warn("error marsheling", "err", err)
-// 			return nil, err
-// 	}
-// 	log.DefaultLogger.Info("looking for host", "host", hosts.Host)
-// 	var newCluster *gocql.ClusterConfig = nil
-// 	var authenticator *gocql.PasswordAuthenticator = nil
-// 	password, hasPassword := secureData["password"]
-// 	user, hasUser := secureData["user"]
-// 	if hasPassword && hasUser {
-// 			log.DefaultLogger.Debug("using username and password", "user", user)
-// 			authenticator = &gocql.PasswordAuthenticator{
-// 					Username: user,
-// 					Password: password,
-// 			}
-// 	}
-// 	if hosts.Host != "" {
-// 			newCluster = gocql.NewCluster(hosts.Host)
-// 			if authenticator != nil {
-// 					newCluster.Authenticator = *authenticator
-// 			}
-// 	}
-// return &instanceSettings{
-// 	cluster: newCluster,
-// 	authenticator: authenticator,
-// 	sessions: make(map[string]*gocql.Session),
-// }, nil
-// }
-
-func (s *instanceSettings) Dispose() {
-// Called before creatinga a new instance to allow plugin authors
-// to cleanup.
+// newHealthCheckErrorf returns a new *backend.CheckHealthResult with its status set to backend.HealthStatusError
+// and the specified message, which is formatted with Sprintf.
+func newHealthCheckErrorf(format string, args ...interface{}) *backend.CheckHealthResult {
+	return &backend.CheckHealthResult{Status: backend.HealthStatusError, Message: fmt.Sprintf(format, args...)}
 }

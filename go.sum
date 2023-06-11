@@ -191,8 +191,8 @@ github.com/gopherjs/gopherjs v0.0.0-20181103185306-d547d1d9531e h1:JKmoR8x90Iww1
 github.com/gopherjs/gopherjs v0.0.0-20181103185306-d547d1d9531e/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
 github.com/gorilla/mux v1.8.0 h1:i40aqfkR1h2SlN9hojwV5ZA91wcXFOvkdNIeFDP5koI=
 github.com/gorilla/mux v1.8.0/go.mod h1:DVbg23sWSpFRCP0SfiEN6jmj59UnW/n46BH5rLB71So=
-github.com/grafana/grafana-plugin-sdk-go v0.164.0 h1:jx9vsVqkG2P0nNYf8iR+VoBRASbuUvkNQBtvtvACDOM=
-github.com/grafana/grafana-plugin-sdk-go v0.164.0/go.mod h1:dPhljkVno3Bg/ZYafMrR/BfYjtCRJD2hU2719Nl3QzM=
+github.com/grafana/grafana-plugin-sdk-go v0.161.0 h1:UjVjRGQ5cuT4Ok30qUeLW2OhQhx9Whuz9Oz/1KsBvVM=
+github.com/grafana/grafana-plugin-sdk-go v0.161.0/go.mod h1:dPhljkVno3Bg/ZYafMrR/BfYjtCRJD2hU2719Nl3QzM=
 github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 h1:UH//fgunKIs4JdUbpDl1VZCDaL56wXCB/5+wF6uHfaI=
 github.com/grpc-ecosystem/go-grpc-middleware v1.4.0/go.mod h1:g5qyo/la0ALbONm6Vbp88Yd8NsDy6rZz+RcrMPxvld8=
 github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 h1:Ovs26xHkKqVztRpIrF/92BcuyuQ/YW4NSIpoGtfXNho=
@@ -317,6 +317,7 @@ github.com/stretchr/testify v1.7.2/go.mod h1:R6va5+xMeoiuVRoj+gSkQ7d3FALtqAAGI1F
 github.com/stretchr/testify v1.8.0/go.mod h1:yNjHg4UonilssWZ8iaSj1OCr/vHnekPRkoO+kdMU+MU=
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/stretchr/testify v1.8.2 h1:+h33VjcLVPDHtOdpUCuF+7gSuG3yGIftsP1YvFihtJ8=
+github.com/stretchr/testify v1.8.2/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/unknwon/bra v0.0.0-20200517080246-1e3013ecaff8 h1:aVGB3YnaS/JNfOW3tiHIlmNmTDg618va+eT0mVomgyI=
 github.com/unknwon/bra v0.0.0-20200517080246-1e3013ecaff8/go.mod h1:fVle4kNr08ydeohzYafr20oZzbAkhQT39gKK/pFQ5M4=
 github.com/unknwon/com v1.0.1 h1:3d1LTxD+Lnf3soQiD4Cp/0BRB+Rsa/+RTvz8GMMzIXs=
