@@ -178,6 +178,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	log.DefaultLogger.Debug"url", d.settings.URL)
 	log.DefaultLogger.Debug"query", q)
 	log.DefaultLogger.Debug"req", req)
+	log.DefaultLogger.Debug("test1")
 	httpResp, err := d.httpClient.Do(req)
 	// test(req)
 	log.DefaultLogger.Debug("resp2", httpResp.Body)
@@ -195,7 +196,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		}
 	}()
 	span.AddEvent("HTTP request done")
-
+	log.DefaultLogger.Debug("test2")
 	// Make sure the response was successful
 	if httpResp.StatusCode != http.StatusOK {
 		return backend.DataResponse{}, fmt.Errorf("%w: expected 200 response, got %d", errRemoteResponse, httpResp.StatusCode)
