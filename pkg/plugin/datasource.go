@@ -176,7 +176,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		req.URL.RawQuery = q.Encode()
 	}
 	httpResp, err := d.httpClient.Do(req)
-	log.DefaultLogger.Debug("resp", httpResp)
+	log.DefaultLogger.Debug("resp2", httpResp.StatusCode)
 	switch {
 	case err == nil:
 		break
