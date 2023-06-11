@@ -228,7 +228,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	return dataResp, err
 }
 
-type test struct {
+type test_struct struct {
 	Test string `json:"test"`
 }
 
@@ -239,7 +239,8 @@ func test(req *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	log.Println(t.Test)
+	log.DefaultLogger.Debug("resp3", t.Test)
+	// log.Println(t.Test)
 }
 
 // CheckHealth performs a request to the specified data source and returns an error if the HTTP handler did not return
